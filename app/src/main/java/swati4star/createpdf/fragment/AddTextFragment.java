@@ -57,7 +57,6 @@ import static swati4star.createpdf.util.CommonCodeUtils.populateUtil;
 import static swati4star.createpdf.util.Constants.READ_WRITE_PERMISSIONS;
 import static swati4star.createpdf.util.Constants.STORAGE_LOCATION;
 import static swati4star.createpdf.util.Constants.pdfExtension;
-import static swati4star.createpdf.util.Constants.textExtension;
 import static swati4star.createpdf.util.DialogUtils.createOverwriteDialog;
 import static swati4star.createpdf.util.StringUtils.getDefaultStorageLocation;
 import static swati4star.createpdf.util.StringUtils.getSnackbarwithAction;
@@ -66,10 +65,9 @@ import static swati4star.createpdf.util.StringUtils.showSnackbar;
 public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnClickListener,
         BottomSheetPopulate, OnBackPressedInterface {
     private Activity mActivity;
-    private String mPdfpath;
+    BottomSheetBehavior mSheetBehavior;
     private String mTextPath;
-    private Uri mPdfUri;
-    private Uri mTextUri;
+
     private FileUtils mFileUtils;
     private MorphButtonUtility mMorphButtonUtility;
     private BottomSheetUtils mBottomSheetUtils;
@@ -85,7 +83,7 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
     MorphingButton mSelectText;
     @BindView(R.id.create_pdf_added_text)
     MorphingButton mCreateTextPDF;
-    BottomSheetBehavior sheetBehavior;
+    private String mPdfPath;
     @BindView(R.id.bottom_sheet)
     LinearLayout layoutBottomSheet;
     @BindView(R.id.recyclerViewFiles)
@@ -100,16 +98,16 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
     LottieAnimationView mLottieProgress;
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View rootView = inflater.inflate(R.layout.fragment_add_text, container, false);
         ButterKnife.bind(this, rootView);
         mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(mActivity);
-        sheetBehavior = BottomSheetBehavior.from(layoutBottomSheet);
+        mSheetBehavior = BottomSheetBehavior.from(layoutBottomSheet);
         mBottomSheetUtils.populateBottomSheetWithPDFs(this);
         mLottieProgress.setVisibility(View.VISIBLE);
-        sheetBehavior.setBottomSheetCallback(new BottomSheetCallback(mUpArrow, isAdded()));
+        mSheetBehavior.setBottomSheetCallback(new BottomSheetCallback(mUpArrow, isAdded()));
         resetView();
         return rootView;
     }
@@ -183,17 +181,15 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
         if (data == null || resultCode != RESULT_OK || data.getData() == null)
             return;
         if (requestCode == INTENT_REQUEST_PICK_PDF_FILE_CODE) {
-            mPdfUri = data.getData();
-            mPdfpath = RealPathUtil.getRealPath(getContext(), data.getData());
+            mPdfPath = RealPathUtil.getRealPath(getContext(), data.getData());
             showSnackbar(mActivity, getResources().getString(R.string.snackbar_pdfselected));
             return;
         }
         if (requestCode == INTENT_REQUEST_PICK_TEXT_FILE_CODE) {
-            mTextUri = data.getData();
             mTextPath = RealPathUtil.getRealPath(getContext(), data.getData());
             showSnackbar(mActivity, getResources().getString(R.string.snackbar_txtselected));
         }
-        setTextAndActivateButtons(mPdfpath, mTextPath);
+        setTextAndActivateButtons(mPdfPath, mTextPath);
     }
 
     private void setTextAndActivateButtons(String pdfPath, String textPath) {
@@ -209,8 +205,7 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
     }
 
     public void resetView() {
-        mPdfpath = mTextPath = null;
-        mPdfUri = mTextUri = null;
+        mPdfPath = mTextPath = null;
         mMorphButtonUtility.morphToGrey(mCreateTextPDF, mMorphButtonUtility.integer());
         mCreateTextPDF.setEnabled(false);
     }
@@ -232,7 +227,7 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
 
             OutputStream fos = new FileOutputStream(new File(mPath));
 
-            PdfReader pdfReader = new PdfReader(mPdfpath);
+            PdfReader pdfReader = new PdfReader(mPdfPath);
             PdfStamper pdfStamper = new PdfStamper(pdfReader, fos);
 
             PdfContentByte pdfContentByte = pdfStamper.getOverContent(pdfReader.getNumberOfPages());
@@ -269,20 +264,18 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
                                            @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (grantResults.length < 1)
             return;
-        switch (requestCode) {
-            case PERMISSION_REQUEST_WRITE_EXTERNAL_STORAGE_RESULT: {
-                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    mPermissionGranted = true;
-                } else
-                    showSnackbar(mActivity, R.string.snackbar_insufficient_permissions);
-            }
+        if (requestCode == PERMISSION_REQUEST_WRITE_EXTERNAL_STORAGE_RESULT) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                mPermissionGranted = true;
+            } else
+                showSnackbar(mActivity, R.string.snackbar_insufficient_permissions);
         }
     }
 
     @Override
     public void onItemClick(String path) {
-        sheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-        mPdfpath = path;
+        mSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+        mPdfPath = path;
         showSnackbar(mActivity, getResources().getString(R.string.snackbar_pdfselected));
     }
 
@@ -293,11 +286,20 @@ public class AddTextFragment extends Fragment implements MergeFilesAdapter.OnCli
 
     @Override
     public void closeBottomSheet() {
-        closeBottomSheetUtil(sheetBehavior);
+        closeBottomSheetUtil(mSheetBehavior);
     }
 
     @Override
     public boolean checkSheetBehaviour() {
-        return checkSheetBehaviourUtil(sheetBehavior);
+        return checkSheetBehaviourUtil(mSheetBehavior);
     }
+
+    /**
+     * called on click of bottom sheet
+     */
+    @OnClick(R.id.viewFiles)
+    void onViewFilesClick() {
+        mBottomSheetUtils.showHideSheet(mSheetBehavior);
+    }
+
 }
